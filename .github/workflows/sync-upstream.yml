@@ -3,13 +3,13 @@ name: Sync Upstream
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * 0"
 
 permissions:
   contents: write
 
 concurrency:
-  group: sync-upstream-"${{ github.ref_name }"}
+  group: sync-upstream-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -21,13 +21,13 @@ jobs:
       - name: actions/checkout@v4 - Check Out Fork
         uses: actions/checkout@v4
         with:
-          ref: "${{ github.ref_name }"}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
-          token: "${{ github.token }"}
+          token: ${{ github.token }}
       - name: bash - Merge Upstream and Retain Runtime Files
         shell: bash
         env:
-          TARGET_BRANCH: "${{ github.ref_name }"}
+          TARGET_BRANCH: ${{ github.ref_name }}
           UPSTREAM_URL: https://github.com/epoko77-ai/im-not-ai
           UPSTREAM_BRANCH: main
         run: |
@@ -47,7 +47,7 @@ jobs:
           retained=(
             LICENSE
             .github/workflows/sync-upstream.yml
-            skills/humanize-korean/
+            skills/
             agents/
             scripts/
           )
@@ -57,10 +57,9 @@ jobs:
           done
           git rm -r --force --ignore-unmatch -- . "${excluded[@]}"
 
-          for file in "${retained[@]}"; do
-            test -f "$file" || test -d "$file"
-            test ! -L "$file"
-          done
+          test -f LICENSE
+          test -f .github/workflows/sync-upstream.yml
+          test -f skills/humanize-korean/SKILL.md
           test "$(git ls-files -- . "${excluded[@]}")" = ""
           git diff --exit-code HEAD -- .github/workflows/sync-upstream.yml
           if git rev-parse --verify --quiet MERGE_HEAD >/dev/null || ! git diff --cached --quiet; then
