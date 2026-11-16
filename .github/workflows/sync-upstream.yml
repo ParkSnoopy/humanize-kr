@@ -1,0 +1,69 @@
+name: Sync Upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-"${{ github.ref_name }"}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'ParkSnoopy/humanize-kr'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: actions/checkout@v4 - Check Out Fork
+        uses: actions/checkout@v4
+        with:
+          ref: "${{ github.ref_name }"}
+          fetch-depth: 0
+          token: "${{ github.token }"}
+      - name: bash - Merge Upstream and Retain Runtime Files
+        shell: bash
+        env:
+          TARGET_BRANCH: "${{ github.ref_name }"}
+          UPSTREAM_URL: https://github.com/epoko77-ai/im-not-ai
+          UPSTREAM_BRANCH: main
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch "$UPSTREAM_URL" "$UPSTREAM_BRANCH"
+          if ! git merge --no-commit --no-ff FETCH_HEAD; then
+            test "$(git ls-files --unmerged)" != ""
+            git diff --name-only --diff-filter=U -z |
+              git --literal-pathspecs restore --source=FETCH_HEAD --staged --worktree \
+                --pathspec-from-file=- --pathspec-file-nul
+          fi
+          git restore --source=HEAD --staged --worktree -- .github/workflows/sync-upstream.yml
+
+          # Directory entries retain all tracked descendants.
+          retained=(
+            LICENSE
+            .github/workflows/sync-upstream.yml
+            skills/humanize-korean/
+            agents/
+            scripts/
+          )
+          excluded=()
+          for file in "${retained[@]}"; do
+            excluded+=(":(top,exclude,literal)$file")
+          done
+          git rm -r --force --ignore-unmatch -- . "${excluded[@]}"
+
+          for file in "${retained[@]}"; do
+            test -f "$file" || test -d "$file"
+            test ! -L "$file"
+          done
+          test "$(git ls-files -- . "${excluded[@]}")" = ""
+          git diff --exit-code HEAD -- .github/workflows/sync-upstream.yml
+          if git rev-parse --verify --quiet MERGE_HEAD >/dev/null || ! git diff --cached --quiet; then
+            git commit -m "chore: sync upstream humanize runtime"
+            git push origin "HEAD:$TARGET_BRANCH"
+          fi
